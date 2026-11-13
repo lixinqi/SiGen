@@ -1,14 +1,16 @@
-# 去重器
+去重器（dedup）
 
 ## 需求背景
 
-没有语义去重的平台会自己骗自己：生成器发现某类测试容易确认短板，就批量改变量名、换循环结构、调表面参数，造出大量“新测试”；预判器在这些熟悉样本上保持高准确率，物理运行反复确认同一个已知短板，审核器看到发现数量上涨便认可更新。系统其实在不断重新发现同一个问题。去重器（dedup）补上的是实验空间的语义度量：两个测试“代码长得不同”与“探索了不同的物理行为”是两回事。
+去重器减少没有增量信息的重复实验。测试的源码形态、业务行为与内部根因是三种不同对象：变量名变化可能没有行为变化；相同访问逻辑的参数跨过边界可能形成重要差异；不同访问逻辑也可能命中同一根因。运行前去重不负责证明根因相同。
 
-去重不是“相同／不同”的二元判断。代码相似的两个测试可能只差一个参数，却恰好跨过缓存冷热边界或内部分片阈值，物理行为截然不同；反过来，两个用不同语言、不同封装写成的程序，可能产生几乎相同的运行时行为轨迹。所以去重器把候选分成三类：冗余重复、受控变体、语义新样本，并把这个归类连同统一判定一起交回。它的判定值填“会带来新信息的概率”，方向与其他组件统一——越大越值得执行。被它折叠的候选不删除，留作复现、回归与预判器校准，只是不再计为新发现、不默认占用探索预算。
+去重位于预判后，但不只查看预判为真的候选。它对全部候选与历史代表、同批代表的关系留下记录，供调度联合选择。参考集合有版本，模型如果事后换代表集合，就改变了原判断的命题。候选不能因为去重器一句重复而永久丢失执行机会。
 
-去重器自己也从物理反馈里学习：被它判为冗余的两个测试若真实运行表现出显著不同的访问路径，是误合并；被它保留为不同的测试若反复产生相同轨迹、相同瓶颈、相同根因，是误拆分。两类错误都靠抽样审计暴露，不靠它自己说了算。
+value 表示候选相对指定代表提供非冗余实验信息的概率；confidence 表示这类关系判断的经验支持。输出还包含关系描述：冗余重复、受控变体、语义新样本。关系描述用于解释比较设计，不等于不可撤销的标签。受控变体可能最终没有新差距，也可能揭示性能突变，不能无条件说所有单参数改动都有价值。
 
-本篇定义语义归类 `Class`、去重结果 `Assessment` 与去重操作 `Assess`。根 README 的 `RunExperiment` 依赖本篇的 `Assess`，所以这篇有 public：根 README 从这里取 `Assess`。
+去重器的反馈需要额外对照。单个候选出现短板不能证明非冗余，两个候选命中同一根因也不能证明冗余。检验需候选和代表在可比条件下的实际轨迹、时序、状态变化和性能响应；轨迹不足或条件不匹配时返回无结论。行为相似度、信息增量定义及阈值应版本化，避免去重器以改标签规则提升自己的成绩。
+
+根 README 从这里取 `Assessment`、`Validation`、`Assess` 与 `Validate`。
 
 ## public.viba
 
@@ -16,64 +18,89 @@
 import dedup.types as dedup
 import dedup.apis as dedup_api
 
-Class = dedup.Class
-
 Assessment = dedup.Assessment
-
+Validation = dedup.Validation
 Assess = dedup_api.Assess
+Validate = dedup_api.Validate
 ```
 
 ## types.viba
 
-语义归类是个和类型：三种归类各带各的数据。冗余重复要指出它属于哪个已有逻辑簇，受控变体要指出它改了哪个变量，语义新样本要给出它与最近邻居的距离——三类各自需要的信息不同，塞进一个记录加标签是装不下的。
+运行前的关系是预测，运行后的 `Validation` 是可用证据结论。候选相对代表的新颖性只在该比较范围内成立；不声称构造了整个程序空间上可证明的语义等价关系。
 
 ```viba types
 import verdict.public as verdict
 
-
-Class =
-  Oneof
-  | $redundant (Redundant * { 冗余重复：预期访问轨迹、系统状态与测量目标与某个已有样本基本相同，没有新增信息；折叠掉它，只保留代表 })
-  | $controlled_variant (ControlledVariant * { 受控变体：主体逻辑与某个已有样本相同，只改了一个关键变量；这类近重复往往是最有价值的消融实验，跨过边界的突变点只能靠它们发现，不能过滤 })
-  | $novel (Novel * { 语义新样本：访问模式、并发关系、持久化语义、初始状态或测量目标与已有样本确实不同，应优先保留 })
-
-Redundant =
-  Object
-  * $representative (str * { 它所属逻辑簇的代表样本标识：折叠后由代表占用执行预算，它自己留作复现与校准材料 })
-
-ControlledVariant =
-  Object
-  * $base (str * { 变体所基于的样本标识 })
-  * $knob (str * { 被单独改变的那个关键变量：数据规模、并发度、缓存状态等；只改一个变量，差距的变化才能归因到这个变量上 })
-
-Novel =
-  Object
-  * $distance (float * { 与最近已有样本的语义距离：调度拿它衡量探索价值，覆盖统计拿它发现还没人去过的区域 })
-
 Assessment =
   Object
-  * $verdict (verdict.Verdict * { 统一判定：判定值是“该候选会带来新信息”的概率，方向与其他组件统一，越大越值得执行；置信度由历史误合并与误拆分记录校准 })
-  * $class (Class * { 语义归类：冗余重复、受控变体或语义新样本，各带各的数据；调度按归类决定折叠、保留对照还是优先执行 })
+  * $judgment (verdict.Judgment * { 非冗余信息命题的预测记录，subject 同时绑定候选与代表集合。value 越大越支持为候选付出额外验证成本 })
+  * $reference_set (str * { 比较代表集合的不可变版本，包含历史和同批代表。空集合允许冷启动，但不构成已证明新颖 })
+  * $relation (Relation * { 运行前推断的逻辑关系，给调度提供聚类和成对比较依据，不能独自生成真实标签 })
+  * $verification_protocol (str * { 运行后判断行为证据能否互相替代的定义、维度和阈值，结果出现后不得临时改变 })
+
+Relation =
+  Oneof
+  | $redundant (Redundant * { 预期轨迹、状态和目标基本可替代，可优先执行代表并对候选保留审计机会 })
+  | $controlled_variant (ControlledVariant * { 存在明确定义的基准对象和受控变化，适合成对运行验证参数响应 })
+  | $novel (Novel * { 预期行为不能由参照证据替代，仍需实际运行检验 })
+
+Redundant = $representative (str * { 提供替代证据的代表对象及观测引用；没有已验证代表时不能声称无需运行即可获得候选真值 })
+ControlledVariant =
+  Object
+  * $base_candidate (str * { 受控对照的基准对象，要能重建其版本、参数和状态 })
+  * $changed_dimension (str * { 被改变的变量及变化值，如并发、状态或数据规模。实验还应确认其他关键条件可比 })
+  * $expected_boundary (str * { 希望检验的响应变化或未知边界，写作假设而非未经证明的内部路径切换 })
+Novel = $difference (str * { 与最近代表的明确行为差异，说明访问、并发或持久化语义，不以代码字面差异冒充新颖性 })
+
+Validation =
+  Object
+  * $assessment (Assessment * { 结果出现前的原始去重判断，比较对象与协议不被后续修改 })
+  * $evidence (list[str] * { 候选与代表的可比原始观测引用，包括实际轨迹与响应。只有候选一侧证据时通常不足以检验冗余 })
+  * $result (ValidationResult * { 非冗余、冗余或无结论；用于去重器校准，不冒充根因归类 })
+
+ValidationResult =
+  Oneof
+  | $nonredundant (Nonredundant * { 有效行为对照支持候选提供代表无法替代的信息，可为去重命题赋正标签 })
+  | $redundant (VerifiedRedundant * { 对照支持在约定维度与容差内可替代，可赋负标签；不证明所有未来条件下等价 })
+  | $inconclusive (InconclusiveValidation * { 缺少代表、轨迹、可比条件或区分证据，保留未知 })
+Nonredundant = $evidence (str * { 支持新增行为或参数响应信息的对照差异及适用范围，不仅是同一根因的名字不同 })
+VerifiedRedundant = $evidence (str * { 支持替代性的对照证据及容差，不从一次结果相同推出普遍等价 })
+InconclusiveValidation = $reason (str * { 验证不足的具体原因，决定是否需要执行代表或追加轨迹，不能填作冗余负标签 })
 ```
 
 ## 基本操作
 
-只有一个操作：去重判定。给出一个候选测试与已有逻辑簇清单，交回统一判定与语义归类。置信度不允许自报，必须调用共享的校准操作，从历史误合并与误拆分记录里算出来。
+1. `Assess` 从候选语义、参数与初始状态寻找历史和同批代表，输出关系预测、非冗余概率及经校准的置信度。
+2. 调度按比较关系选择代表、受控变体和审计对象；成对验证需要的总成本一并计入预算。模型判冗余不删除原始候选。
+3. `Validate` 根据候选与代表的实际可比观测，按冻结协议检验信息是否可替代。无法比较时返回无结论。
+4. 去重器通过误合并与误拆分证据改进。根因合并或修复验证由额外定位证据处理，不能倒推运行前两个程序必然重复。
 
 ## apis.viba
 
 ```viba apis
 import dedup.types as dedup
 import generator.public as generator
+import measure.public as measure
 import verdict.public as verdict
-import feedback.public as feedback
 
 Assess =
      dedup.Assessment
-  <- $candidate (generator.Candidate * { 候选测试：源码、负载族与生成依据 })
-  <- $clusters (list[str] * { 已有逻辑簇及代表样本的标识清单：判定的参照系；判断依据包括访问轨迹、操作比例与顺序、初始状态、缓存冷热、并发时序与测量目标 })
+  <- $candidate (generator.Candidate * { 待比较的完整行为对象，代码与参数、并发和状态一起参与比较 })
+  <- $representatives (list[generator.Candidate] * { 已有和同批代表的可复核完整内容，不只传代表名字让操作暗读隐藏状态 })
+  <- $reference_version (str * { 参照集合版本，锁定该判断的比较范围 })
+  <- $verification_protocol (str * { 非冗余信息的验证维度和容差，避免在物理结果后任意改定义 })
+  <- $artifact (str * { 去重器工件和关系模型版本，可由后续审核更新 })
+  <- $history (list[verdict.CalibrationCase] * { 去重命题的有效行为对照案例，不混入只有性能阳性却无代表证据的记录 })
   <- {
-    判定新信息：先按访问轨迹与系统状态找邻居，再区分冗余重复、受控变体与语义新样本；只改一个关键变量的近重复必须认成受控变体保留下来；判定值填“会带来新信息”的概率，误合并与误拆分的历史决定置信度
+    给出候选相对代表集合的非冗余概率与关系解释，校准经验置信度。代码相似与根因相同均不能直接推导冗余；受控变体保留成对验证依据，返回原始判断而非删除动作
   }
-  <- $calibrate (feedback.Calibrate * { 校准置信度：它按历史误合并与误拆分记录交回本次判断应有的置信度；去重器不自报置信度，否则它可以在从没判对的区域里依然自信 })
+  <- $calibrate (verdict.Calibrate * { 返回同类行为关系判断的经验可靠性，填入 confidence 并保存所用历史引用 })
+
+Validate =
+     dedup.Validation
+  <- $assessment (dedup.Assessment * { 原始判断，固定比较对象、参照和协议 })
+  <- $observations (list[measure.Observation] * { 候选与代表的实际可比观测；原始轨迹不足或环境不同不能硬给标签 })
+  <- {
+    按既定非冗余协议检验行为证据能否互相替代。输出明确正负或无结论，保存比较依据；不以同一根因或一次相同结果替代行为验证，不让未运行对象获得虚构标签
+  }
 ```
