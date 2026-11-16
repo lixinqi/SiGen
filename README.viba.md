@@ -13,7 +13,6 @@ import readme.types as readme
 import readme.apis as readme_api
 
 Candidate = readme.Candidate
-Verdict = readme.Verdict
 Outcome = readme.Outcome
 Observation = readme.Observation
 JudgedCandidate = readme.JudgedCandidate
@@ -24,7 +23,7 @@ si_train = readme_api.si_train
 
 ## types.viba
 
-这一版只有六个类型。生成器、预判器、去重器和测量函数的具体参数（协议、工件、历史、校准）都由调用方绑在这些函数里，接口只写它们之间传递的数据。
+这一版只有五个类型。生成器、预判器、去重器和测量函数的具体参数（协议、工件、历史）都由调用方绑在这些函数里，接口只写它们之间传递的数据。
 
 ### Candidate
 
@@ -38,17 +37,6 @@ Candidate =
   * $initial_state (str * { 跑之前的数据与缓存状态 })
   * $correctness (str * { 跑完必须成立的条件 })
   * $hypothesis (str * { 为什么这个测试可能暴露差距 })
-```
-
-### Verdict
-
-一个命题的预测。`value` 是命题成立的概率，`confidence` 是这个预测有多少经验支撑；两者都在 0 到 1 之间。
-
-```viba types
-Verdict =
-  Object
-  * $value (float * { 命题成立的预测概率，0 到 1 })
-  * $confidence (float * { 这个预测的经验可靠程度，0 到 1 })
 ```
 
 ### Outcome
@@ -83,8 +71,8 @@ Observation =
 JudgedCandidate =
   Object
   * $candidate (Candidate * { 本轮生成的测试 })
-  * $validity (Verdict * { 有效性命题的预测 })
-  * $redundancy (Verdict * { 非冗余命题的预测 })
+  * $validity (float * { 有效性命题的预测概率，0 到 1 })
+  * $redundancy (float * { 非冗余命题的预测概率，0 到 1 })
 ```
 
 ### ObservedCandidate
@@ -119,8 +107,8 @@ si_forward =
      list[readme.JudgedCandidate]
   <- $task (str * { 被测与对照环境的可比较能力、生成目标与禁止操作 })
   <- $generate ((list[readme.Candidate] <- $task str) * { 当前生成器；工件、经验、数量、覆盖依据与种子已绑在它里面 })
-  <- $predict_validity ((readme.Verdict <- $candidate readme.Candidate) * { 当前预判器；命题、协议、历史与校准已绑在它里面 })
-  <- $assess_redundancy ((readme.Verdict <- $candidate readme.Candidate) * { 当前去重器；代表集合、命题、协议、历史与校准已绑在它里面 })
+  <- $predict_validity ((float <- $candidate readme.Candidate) * { 当前预判器；命题、协议与历史已绑在它里面 })
+  <- $assess_redundancy ((float <- $candidate readme.Candidate) * { 当前去重器；代表集合、命题、协议与历史已绑在它里面 })
   <- { 按任务生成候选，给每个候选取有效性预测值与去重预测值；不测量、不删候选 }
 ```
 
