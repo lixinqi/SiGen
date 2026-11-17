@@ -2,7 +2,7 @@
 
 ## 需求背景
 
-把一轮尝试的结果算成一个有效率：有效条数除以总条数。有效指测量确认了差距；其余都不算。
+把训练各轮的有效率收成两个数：轮次平均与平均退化（相邻两轮下降量的平均）。有效指测量确认了差距；其余都不算。
 
 ## public.viba
 
@@ -14,11 +14,11 @@ Evaluate = evaluate_api.Evaluate
 
 ## types.viba
 
-这一层不新增类型：输入是每次尝试是否有效，输出是 `metric.EffectiveRate`（分子与分母）。
+这一层不新增类型：输入是各轮的 `metric.EffectiveRate`，输出是 `metric.RoundEvaluation`。
 
 ## 基本操作
 
-`Evaluate` 数有效条数，写成分数；空输入是程序错。
+`Evaluate` 收各轮有效率，返回轮次平均与平均退化；空列表是程序错，单轮的平均退化记 0。
 
 ## apis.viba
 
@@ -28,11 +28,11 @@ import metric.public as metric
 
 ### Evaluate
 
-数有效条数，写成分数。
+算轮次平均与平均退化。
 
 ```viba apis
 Evaluate =
-     metric.EffectiveRate
-  <- $results (list[bool] * { 每次尝试是否得到有效结果，一条一个 })
-  <- { 数 true 的条数作为分子，总条数作为分母；空列表是程序错；false 不算有效 }
+     metric.RoundEvaluation
+  <- $rates (list[metric.EffectiveRate] * { 每轮训练后的有效率，按轮次排 })
+  <- { 平均：各轮相加除以轮数；平均退化：相邻两轮下降量的平均，relu(r_{i-1} - r_i)（负数取 0，只算下降），单轮记 0；空列表是程序错 }
 ```

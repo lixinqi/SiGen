@@ -16,19 +16,22 @@ Candidate = readme.Candidate
 Observation = readme.Observation
 JudgedCandidate = readme.JudgedCandidate
 ObservedCandidate = readme.ObservedCandidate
+TrainRound = readme.TrainRound
 si_forward = readme_api.si_forward
 si_train = readme_api.si_train
 ```
 
 ## types.viba
 
-这一版只有四个类型。生成器、预判器、去重器和测量函数的具体参数（协议、工件、历史）都由调用方绑在这些函数里，接口只写它们之间传递的数据。
+这一版只有五个类型。生成器、预判器、去重器和测量函数的具体参数（协议、工件、历史）都由调用方绑在这些函数里，接口只写它们之间传递的数据。
 
 ### Candidate
 
 一个可运行的测试。源码与参数说明跑什么，初始状态说明从哪开始，正确性检查说明跑完必须成立什么，假设说明为什么它可能暴露差距。
 
 ```viba types
+import metric.public as metric
+
 Candidate =
   Object
   * $source (str * { 测试程序源码与依赖 })
@@ -72,16 +75,28 @@ ObservedCandidate =
   * $observation (Observation * { 这次测量的结果与原始记录 })
 ```
 
+### TrainRound
+
+一次训练步的结果：本轮的观测，和追加本轮有效率后的历史。
+
+```viba types
+TrainRound =
+  Object
+  * $observations (list[ObservedCandidate] * { 本轮的判断与观测 })
+  * $history (list[metric.EffectiveRate] * { 追加本轮有效率后的各轮历史 })
+```
+
 ## 基本操作
 
 `si_forward` 按任务生成候选，给每个候选取两个预测。它不测量、不删候选。
 
-`si_train` 跑一次前向，对每个候选测量一次，把候选、预测和观测配在一起。它不做预算选择、不追加记录。
+`si_train` 跑一次前向，对每个候选测量一次，数出本轮的有效率，追加到历史，返回本轮观测与新的历史。它不做预算选择、不追加记录。
 
 ## apis.viba
 
 ```viba apis
 import readme.types as readme
+import metric.public as metric
 ```
 
 ### si_forward
@@ -100,13 +115,14 @@ si_forward =
 
 ### si_train
 
-跑一次前向，对前向交回的每个候选测量一次，返回配好的预测与观测。它不做预算选择、不追加记录。
+跑一次前向，对前向交回的每个候选测量一次，数出本轮的有效率，追加到历史，返回本轮观测与新的历史。它不做预算选择、不追加记录。
 
 ```viba apis
 si_train =
-     list[readme.ObservedCandidate]
+     readme.TrainRound
   <- $task (str * { 本轮任务，与前向收到的是同一份 })
+  <- $history (list[metric.EffectiveRate] * { 之前各轮的有效率，按轮次排；第一轮为空 })
   <- $forward ((list[readme.JudgedCandidate] <- $task str) * { 当前前向；生成器、预判器与去重器已绑好 })
   <- $measure ((readme.Observation <- $candidate readme.Candidate) * { 当前环境评估；被测、对照、协议与初始状态已绑好 })
-  <- { 跑一次前向，对每个候选测量一次，返回配好的预测值与观测；不做预算选择、不追加记录 }
+  <- { 跑一次前向，对每个候选测量一次；数本轮观测里的 effective 条数与总条数，作为本轮的 EffectiveRate，追加到 history；返回本轮观测与新的 history }
 ```
