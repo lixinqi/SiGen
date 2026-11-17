@@ -13,7 +13,6 @@ import readme.types as readme
 import readme.apis as readme_api
 
 Candidate = readme.Candidate
-Outcome = readme.Outcome
 Observation = readme.Observation
 JudgedCandidate = readme.JudgedCandidate
 ObservedCandidate = readme.ObservedCandidate
@@ -23,7 +22,7 @@ si_train = readme_api.si_train
 
 ## types.viba
 
-这一版只有五个类型。生成器、预判器、去重器和测量函数的具体参数（协议、工件、历史）都由调用方绑在这些函数里，接口只写它们之间传递的数据。
+这一版只有四个类型。生成器、预判器、去重器和测量函数的具体参数（协议、工件、历史）都由调用方绑在这些函数里，接口只写它们之间传递的数据。
 
 ### Candidate
 
@@ -39,27 +38,14 @@ Candidate =
   * $hypothesis (str * { 为什么这个测试可能暴露差距 })
 ```
 
-### Outcome
-
-一次测量的结果，四种之一。执行无效不能当成没有差距。
-
-```viba types
-Outcome =
-  Oneof
-  | $supported (str * { 测量确认差距的证据摘要 })
-  | $not_supported (str * { 测量确认没有差距的证据摘要 })
-  | $inconclusive (str * { 数据不足，不能下结论的原因 })
-  | $invalid (str * { 执行本身无效，如构建失败或环境失效；不能当作没有差距 })
-```
-
 ### Observation
 
-一次测量的记录：结果，以及原始数据、重复次数和成本。
+一次测量的记录：这次尝试是否有效，以及原始数据、重复次数和成本。
 
 ```viba types
 Observation =
   Object
-  * $outcome (Outcome * { 这次测量的结果 })
+  * $effective (bool * { 测量是否确认了差距；无结论和执行无效都记 false })
   * $raw (str * { 原始记录、重复测量与成本 })
 ```
 
