@@ -48,7 +48,7 @@ Candidate =
 ```viba types
 Observation =
   Object
-  * $effective (bool * { 测量是否确认了差距；无结论和执行无效都记 false })
+  * $effective (bool * { 测量是否确认了差距 })
   * $raw (str * { 原始记录、重复测量与成本 })
 ```
 
