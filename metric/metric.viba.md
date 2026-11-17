@@ -11,7 +11,7 @@ import metric.types as metric
 
 EffectiveRate = metric.EffectiveRate
 Rational = metric.Rational
-RoundEvaluation = metric.RoundEvaluation
+TrainingSummary = metric.TrainingSummary
 ```
 
 ## types.viba
@@ -38,12 +38,12 @@ Rational =
   * $denominator (int * { 分母；大于零 })
 ```
 
-### RoundEvaluation
+### TrainingSummary
 
 训练各轮有效率的两个读数：轮次平均，与平均退化（越小越稳）。
 
 ```viba types
-RoundEvaluation =
+TrainingSummary =
   Object
   * $average (Rational * { 各轮有效率的算术平均 })
   * $degradation (Rational * { 相邻两轮有效率下降量的平均：平均 relu(r_{i-1} - r_i)，负数取 0，只算下降；越小越稳 })

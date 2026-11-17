@@ -14,7 +14,7 @@ Evaluate = evaluate_api.Evaluate
 
 ## types.viba
 
-这一层不新增类型：输入是各轮的 `metric.EffectiveRate`，输出是 `metric.RoundEvaluation`。
+这一层不新增类型：输入是各轮的 `metric.EffectiveRate`，输出是 `metric.TrainingSummary`。
 
 ## 基本操作
 
@@ -32,7 +32,7 @@ import metric.public as metric
 
 ```viba apis
 Evaluate =
-     metric.RoundEvaluation
+     metric.TrainingSummary
   <- $rates (list[metric.EffectiveRate] * { 每轮训练后的有效率，按轮次排 })
   <- { 平均：各轮相加除以轮数；平均退化：相邻两轮下降量的平均，relu(r_{i-1} - r_i)（负数取 0，只算下降），单轮记 0；空列表是程序错 }
 ```
