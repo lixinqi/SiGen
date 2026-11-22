@@ -20,7 +20,9 @@ CumulativeStateGotoTable = transfer_table.CumulativeStateGotoTable
 
 get_si_local_state_schema = transfer_table_api.get_si_local_state_schema
 get_si_cumulative_state_schema = transfer_table_api.get_si_cumulative_state_schema
+get_initial_cumulative_state = transfer_table_api.get_initial_cumulative_state
 get_candidate_next_local_states = transfer_table_api.get_candidate_next_local_states
+is_final_cumulative_state = transfer_table_api.is_final_cumulative_state
 goto_next = transfer_table_api.goto_next
 ```
 
@@ -94,8 +96,10 @@ CumulativeStateDFE =
 
 2. `get_si_local_state_schema` 从 `$si_repo_path` 找到项目的 local state schema（`LocalStateInterface` 的子类），返回并缓存，作为全项目 local state 的约束检查依据。
 3. `get_si_cumulative_state_schema` 同理，返回 `CumulativeStateInterface` 的子类。
-4. `get_candidate_next_local_states` 用当前累积状态的 `goto_table` 找到所在泛型实现的目录；在该目录里 grep `pattern LocalState`，看它 import 来源的 `state_id`；对每个 `state_id` 用 `__import__` 取定义，作为候选下一步。
-5. `goto_next` 用 `goto_table` 找到对应的泛型 `CumulativeStateGotoTable`；用选中的局部状态索引它，返回下一累积状态。
+4. `get_initial_cumulative_state` 按 cumulative state schema 的约定取项目的初始累积状态，用 `__import__` 取它的定义。
+5. `get_candidate_next_local_states` 用当前累积状态的 `goto_table` 找到所在泛型实现的目录；在该目录里 grep `pattern LocalState`，看它 import 来源的 `state_id`；对每个 `state_id` 用 `__import__` 取定义，作为候选下一步。
+6. `is_final_cumulative_state` 用候选列表判断终态：`get_candidate_next_local_states` 返回空列表时是终态。
+7. `goto_next` 用 `goto_table` 找到对应的泛型 `CumulativeStateGotoTable`；用选中的局部状态索引它，返回下一累积状态。
 
 ## apis.viba
 
@@ -131,6 +135,20 @@ get_si_cumulative_state_schema =
   }
 ```
 
+### get_initial_cumulative_state
+
+返回项目的初始累积状态。
+
+```viba apis
+get_initial_cumulative_state =
+     transfer_table.CumulativeStateInterface
+  <- $env Env
+  <- $si_repo_path (str * { SiGen 项目的仓库路径 })
+  <- {
+    用 get_si_cumulative_state_schema 找到项目的 cumulative state schema；按 schema 约定的初始状态 state_id，用 __import__ << state_id 取它，返回
+  }
+```
+
 ### get_candidate_next_local_states
 
 当前累积状态下，列出候选的下一步局部状态。
@@ -143,6 +161,21 @@ get_candidate_next_local_states =
   <- $cum_state (transfer_table.CumulativeStateInterface * { 当前累积状态；它的 goto_table 指向泛型实现 })
   <- {
     通过 $cum_state.goto_table 找到所在泛型实现所在的目录；在目录里 grep `pattern LocalState`，看它 import 来源的 state_id；对每个 state_id 用 __import__ << state_id 取定义，收成候选列表
+  }
+```
+
+### is_final_cumulative_state
+
+判断一个累积状态是不是终态。
+
+```viba apis
+is_final_cumulative_state =
+     bool
+  <- $env Env
+  <- $si_repo_path (str * { SiGen 项目的仓库路径 })
+  <- $cum_state (transfer_table.CumulativeStateInterface * { 要判断的累积状态 })
+  <- {
+    用 get_candidate_next_local_states 取 $cum_state 的候选；空列表就是终态，否则不是
   }
 ```
 
