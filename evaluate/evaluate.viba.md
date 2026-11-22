@@ -34,5 +34,7 @@ import metric.public as metric
 Evaluate =
      metric.TrainingSummary
   <- $rates (list[metric.EffectiveRate] * { 每轮训练后的有效率，按轮次排 })
-  <- { 平均：各轮相加除以轮数；平均退化：相邻两轮下降量的平均，relu(r_{i-1} - r_i)（负数取 0，只算下降），单轮记 0；空列表是程序错 }
+  <- {
+    平均：各轮相加除以轮数；平均退化：相邻两轮下降量的平均，relu(r_{i-1} - r_i)（负数取 0，只算下降），单轮记 0；空列表是程序错
+  }
 ```

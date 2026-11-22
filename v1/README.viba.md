@@ -110,7 +110,9 @@ si_forward =
   <- $generate ((list[readme.Candidate] <- $task str) * { 当前生成器；工件、经验、数量、覆盖依据与种子已绑在它里面 })
   <- $predict_validity ((float <- $candidate readme.Candidate) * { 当前预判器；命题、协议与历史已绑在它里面 })
   <- $assess_redundancy ((float <- $candidate readme.Candidate) * { 当前去重器；代表集合、命题、协议与历史已绑在它里面 })
-  <- { 按任务生成候选，给每个候选取有效性预测值与去重预测值；不测量、不删候选 }
+  <- {
+    按任务生成候选，给每个候选取有效性预测值与去重预测值；不测量、不删候选
+  }
 ```
 
 ### si_train
@@ -124,5 +126,7 @@ si_train =
   <- $history (list[metric.EffectiveRate] * { 之前各轮的有效率，按轮次排；第一轮为空 })
   <- $forward ((list[readme.JudgedCandidate] <- $task str) * { 当前前向；生成器、预判器与去重器已绑好 })
   <- $measure ((readme.Observation <- $candidate readme.Candidate) * { 当前环境评估；被测、对照、协议与初始状态已绑好 })
-  <- { 跑一次前向，对每个候选测量一次；数本轮观测里的 effective 条数与总条数，作为本轮的 EffectiveRate，追加到 history；返回本轮观测与新的 history }
+  <- {
+    跑一次前向，对每个候选测量一次；数本轮观测里的 effective 条数与总条数，作为本轮的 EffectiveRate，追加到 history；返回本轮观测与新的 history
+  }
 ```
